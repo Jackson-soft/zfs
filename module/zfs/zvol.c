@@ -1005,15 +1005,12 @@ zvol_open(struct block_device *bdev, fmode_t flag)
 
 	if ((flag & FMODE_WRITE) &&
 	    (get_disk_ro(zv->zv_disk) || (zv->zv_flags & ZVOL_RDONLY))) {
+		zvol_last_close(zv);
 		error = -EROFS;
-		goto out_open_count;
+		goto out_mutex;
 	}
 
 	zv->zv_open_count++;
-
-out_open_count:
-	if (zv->zv_open_count == 0)
-		zvol_last_close(zv);
 
 out_mutex:
 	if (drop_mutex)
@@ -1035,11 +1032,11 @@ zvol_release(struct gendisk *disk, fmode_t mode)
 		drop_mutex = 1;
 	}
 
-	ASSERT3P(zv, !=, NULL);
-	ASSERT3U(zv->zv_open_count, >, 0);
-	zv->zv_open_count--;
-	if (zv->zv_open_count == 0)
-		zvol_last_close(zv);
+	if (zv->zv_open_count > 0) {
+		zv->zv_open_count--;
+		if (zv->zv_open_count == 0)
+			zvol_last_close(zv);
+	}
 
 	if (drop_mutex)
 		mutex_exit(&zvol_state_lock);
